@@ -1,6 +1,7 @@
 const Usuario = require('../models/Usuario');
 const Producto = require('../models/Producto');
 const Cliente = require('../models/Cliente');
+const Pedido = require('../models/Pedido');
 const bcryptjs = require('bcryptjs');
 require('dotenv').config({ path: 'variables.env' });
 const jwt = require('jsonwebtoken');
@@ -61,7 +62,34 @@ const resolvers = {
 
             return cliente;
 
-            //quien lo creo puede verlo
+        },
+        obtenerPedidos: async () => {
+            try {
+                const pedidos = await Pedido.find({});
+                return pedidos;
+            } catch (error) {
+                console.log(error);
+            }
+        },
+        obtenerPedidosVendedor: async (_, { }, ctx) => {
+            try {
+                const pedidos = await Pedido.find({ vendedor: ctx.usuario.id });
+                return pedidos;
+            } catch (error) {
+                console.log(error);
+            }
+        },
+        obtenerPedido: async (_, { id }, ctx) => {
+            const existePedido = await Pedido.findById(id);
+            if (!existePedido) {
+                throw new Error('El pedido que intenta consultar No existe');
+            }
+
+            if (existePedido.vendedor.toString() !== ctx.usuario.id) {
+                throw new Error('No tiene permisos para ver ese pedido');
+            }
+
+            return existePedido;
         }
     },
     Mutation: {
@@ -180,8 +208,98 @@ const resolvers = {
                 throw new Error('No tiene las credenciales para eiminar ese cliente');
             }
 
-            await Cliente.findOneAndDelete({_id: id});
+            await Cliente.findOneAndDelete({ _id: id });
             return "Cliente eliminado!";
+        },
+        nuevoPedido: async (_, { input }, ctx) => {
+
+            const { cliente, pedido } = input;
+
+            //verificar si cliente existe,
+            const existeCliente = await Cliente.findById(cliente);
+            if (!existeCliente) {
+                throw new Error('No existe el cliente');
+            }
+
+            //verificar si el cliente es del vendedor del
+            if (existeCliente.vendedor.toString() !== ctx.usuario.id) {
+                throw new Error('No tiene permiso para crear pedidos al cliente');
+            }
+
+            //Revisar Stock
+            //sumar Total
+            let total = 0;
+            for await (const producto of pedido) {
+                const { id } = producto;
+                const productoDB = await Producto.findById(id);
+                if (producto.cantidad > productoDB.existencia) {
+                    throw new Error(`El producto ${productoDB.nombre} excede la cantidad disponible`);
+                } else {
+                    productoDB.existencia = productoDB.existencia - producto.cantidad;
+                    await productoDB.save();
+                    total += producto.cantidad * productoDB.precio;
+                }
+            }
+
+            //crear Un nuevo pedido
+            const pedidoNuevo = new Pedido(input);
+            //asignarle un vendedor
+            pedidoNuevo.vendedor = ctx.usuario.id
+            //asignar Total
+            pedidoNuevo.total = total;
+            //guardar el pedido
+            const resultado = pedidoNuevo.save();
+            return resultado;
+        },
+        actualizarPedido: async (_, { id, input }, ctx) => {
+            const { cliente, pedido } = input;
+            //pedido existe el
+            const existePedido = await Pedido.findById(id);
+            if (!existePedido) {
+                throw new Error('No existe el pedido que intenta editar');
+            }
+            //cliente existe el
+            const existeCliente = await Cliente.findById(cliente);
+            if (!existeCliente) {
+                throw new Error('No existe el cliente');
+            }
+            //cliente y pedido pertenece al vendedor el
+            if (existeCliente.vendedor.toString() !== ctx.usuario.id) {
+                throw new Error('No tiene permiso para usar el cliente');
+            }
+            //revisar stockador
+            if (pedido) {
+                let total = 0;
+                for await (const producto of pedido) {
+                    const { id } = producto;
+                    const productoDB = await Producto.findById(id);
+                    if (producto.cantidad > productoDB.existencia) {
+                        throw new Error(`El producto ${productoDB.nombre} excede la cantidad disponible`);
+                    } else {
+                        productoDB.existencia = productoDB.existencia - producto.cantidad;
+                        await productoDB.save();
+                        total += producto.cantidad * productoDB.precio;
+                    }
+                }
+
+                input.total = total;
+            }
+
+            const resultado = await Pedido.findOneAndUpdate({ _id: id }, input, { new: true });
+            return resultado;
+        },
+        eliminarPedido: async (_, { id }, ctx) => {
+            const existePedido = await Pedido.findById(id);
+            if (!existePedido) {
+                throw new Error('El pedido que intenta eliminar no existe');
+            }
+
+            if (existePedido.vendedor.toString() !== ctx.usuario.id) {
+                throw new Error('No tiene permiso para elimianr este pedido');
+            }
+
+            await Pedido.findOneAndDelete({ _id: id });
+            return "Pedido Eliminado";
         }
     }
 }

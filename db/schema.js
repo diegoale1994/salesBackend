@@ -31,6 +31,21 @@ const typeDefs = gql`
         vendedor: ID
     }
 
+    type Pedido {
+        id: ID
+        pedido: [PedidoGrupo]
+        total: Float
+        cliente: ID
+        vendedor: ID
+        fecha: String
+        estado: EstadoPedido
+    }
+
+    type PedidoGrupo {
+        id: ID
+        cantidad: Int
+    }
+
     input AutenticarInput {
         email: String!
         password: String!
@@ -57,6 +72,24 @@ const typeDefs = gql`
         telefono: String
     }
 
+    input PedidoProductoInput {
+        id: ID
+        cantidad: Int
+    }
+
+    input PedidoInput {
+        pedido: [PedidoProductoInput]!,
+        total: Float
+        cliente: ID
+        estado: EstadoPedido
+    }
+
+    enum EstadoPedido {
+        PENDIENTE
+        COMPLETADO
+        CANCELADO
+    }
+
     type Query {
 
         #Usuarios
@@ -70,23 +103,33 @@ const typeDefs = gql`
         obtenerClientes: [Cliente]
         obtenerClientesVendedor: [Cliente]
         obtenerCliente(id: ID!): Cliente
+
+        # Pedidos
+        obtenerPedidos: [Pedido]
+        obtenerPedidosVendedor: [Pedido]
+        obtenerPedido(id: ID!): Pedido
     }
 
     type Mutation {
 
-        #Usuarios
+        # Usuarios
         nuevoUsuario(input:UsuarioInput): Usuario
         autenticarUsuario(input: AutenticarInput): Token
 
-        #Productos
+        # Productos
         nuevoProducto(input: ProductoInput): Producto
         actualizarProducto(id: ID!, input:ProductoInput): Producto
         eliminarProducto(id: ID!): String
 
-        #Clientes
+        # Clientes
         nuevoCliente(input: ClienteInput): Cliente
         actualizarCliente(id: ID!, input: ClienteInput): Cliente
         eliminarCliente(id: ID!): String
+
+        # Pedidos
+        nuevoPedido(input: PedidoInput) : Pedido
+        actualizarPedido (id: ID!, input: PedidoInput): Pedido
+        eliminarPedido (id: ID!): String
     }
 `;
 
